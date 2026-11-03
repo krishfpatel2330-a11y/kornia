@@ -202,6 +202,37 @@ class TestGuidedBlur(BaseTester):
         assert result.dtype == expected_dtype
         self.assert_close(result, torch.full_like(result, 0.5))
 
+    @pytest.mark.parametrize(
+        ("guidance_dtype", "input_dtype"),
+        [
+            (torch.float32, torch.float64),
+            (torch.uint8, torch.float64),
+            (torch.float64, torch.float32),
+            (torch.float16, torch.float32),
+            (torch.float32, torch.float16),
+            (torch.bfloat16, torch.float32),
+            (torch.float32, torch.bfloat16),
+        ],
+    )
+    def test_multichannel_mixed_dtypes_match_promoted_inputs(self, guidance_dtype, input_dtype, device):
+        if torch.float64 in (guidance_dtype, input_dtype) and device.type == "mps":
+            pytest.skip("MPS has no float64")
+        if torch.bfloat16 in (guidance_dtype, input_dtype) and device.type == "mps":
+            pytest.skip("MPS does not support bfloat16")
+        shape = (1, 3, 5, 7)
+        if guidance_dtype == torch.uint8:
+            guidance = torch.randint(0, 4, shape, device=device, dtype=guidance_dtype)
+        else:
+            guidance = torch.rand(shape, device=device, dtype=guidance_dtype)
+        input = torch.rand(shape, device=device, dtype=input_dtype)
+        promoted_dtype = torch.promote_types(guidance_dtype, input_dtype)
+
+        result = guided_blur(guidance, input, 3, 1e-2)
+        expected = guided_blur(guidance.to(promoted_dtype), input.to(promoted_dtype), 3, 1e-2)
+
+        assert result.dtype == promoted_dtype
+        self.assert_close(result, expected, rtol=1e-4, atol=1e-5)
+
     @pytest.mark.parametrize("batch_size", [1, 2])
     @pytest.mark.parametrize("guide_dim", [1, 3])
     @pytest.mark.parametrize("input_dim", [1, 3])
