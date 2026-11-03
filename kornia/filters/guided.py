@@ -161,7 +161,7 @@ def _guided_blur_multichannel_guidance(
     if solve_dtype in (torch.float16, torch.bfloat16):
         solve_dtype = torch.float32
     a = torch.linalg.solve(A.to(solve_dtype), cov_Ip.to(solve_dtype)).to(cov_Ip.dtype)
-    b = mean_p - (mean_I.unsqueeze(-2) @ a).squeeze(-2)  # B, H, W, C_input
+    b = mean_p - (mean_I.to(a.dtype).unsqueeze(-2) @ a).squeeze(-2)  # B, H, W, C_input
 
     mean_a = box_blur(a.flatten(-2).permute(0, 3, 1, 2), kernel_size, border_type, separable=separable)
     mean_b = box_blur(b.permute(0, 3, 1, 2), kernel_size, border_type, separable=separable)
@@ -172,7 +172,7 @@ def _guided_blur_multichannel_guidance(
     mean_a = mean_a.view(B, C, C_in, *guidance.shape[-2:])
 
     # torch.einsum might not be contiguous, thus mean_b is the first argument
-    return mean_b + torch.einsum("BCHW,BCcHW->BcHW", guidance, mean_a)
+    return mean_b + torch.einsum("BCHW,BCcHW->BcHW", guidance.to(mean_a.dtype), mean_a)
 
 
 def guided_blur(
